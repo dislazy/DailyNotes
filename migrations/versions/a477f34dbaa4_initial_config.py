@@ -38,7 +38,7 @@ def upgrade():
     sa.Column('is_date', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['user.uuid'], ),
     sa.PrimaryKeyConstraint('uuid'),
-    sa.UniqueConstraint('title')
+    sa.UniqueConstraint('user_id,title')
     )
     op.create_index(op.f('ix_note_uuid'), 'note', ['uuid'], unique=True)
     # ### end Alembic commands ###
