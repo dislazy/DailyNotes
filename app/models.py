@@ -3,9 +3,6 @@ from app.model_types import GUID
 from sqlalchemy.sql import func
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import event
-from sqlalchemy.orm.attributes import InstrumentedAttribute
-from Crypto.Cipher import AES
-import binascii
 import uuid
 import frontmatter
 import re
@@ -15,36 +12,39 @@ key = app.config['DB_ENCRYPTION_KEY']
 
 
 def aes_encrypt(data):
-  cipher = AES.new(key, AES.MODE_CFB, key[::-1])
-  return cipher.encrypt(data)
+  # cipher = AES.new(key, AES.MODE_CFB, key[::-1])
+  return data
 
 def aes_encrypt_old(data):
-  cipher = AES.new(key)
-  data = data + (" " * (16 - (len(data) % 16)))
-  return binascii.hexlify(cipher.encrypt(data))
+  # cipher = AES.new(key)
+  # data = data + (" " * (16 - (len(data) % 16)))
+  # return binascii.hexlify(cipher.encrypt(data))
+  return data
 
 def aes_decrypt(data):
   # From a new object
-  if type(data) is InstrumentedAttribute:
-    return ''
+  # if type(data) is InstrumentedAttribute:
+  #   return ''
+  #
+  # cipher = AES.new(key, AES.MODE_CFB, key[::-1])
+  #
+  # decrypted = cipher.decrypt(data)
 
-  cipher = AES.new(key, AES.MODE_CFB, key[::-1])
-
-  decrypted = cipher.decrypt(data)
-
-  try:
-    return decrypted.decode('utf-8')
-  except:
-    # Data is in old encryption or it is unencrypted
-    return aes_decrypt_old(data)
+  # try:
+  #   return decrypted.decode('utf-8')
+  # except:
+  #   # Data is in old encryption or it is unencrypted
+  #   return aes_decrypt_old(data)
+  return data
 
 def aes_decrypt_old(data):
-  try:
-    cipher = AES.new(key)
-    return cipher.decrypt(binascii.unhexlify(data)).rstrip().decode('ascii')
-  except:
-    # If data is not encrypted, just return it
-    return data
+  return data
+  # try:
+  #   cipher = AES.new(key)
+  #   return cipher.decrypt(binascii.unhexlify(data)).rstrip().decode('ascii')
+  # except:
+  #   # If data is not encrypted, just return it
+  #   return data
 
 
 class User(db.Model):
@@ -63,9 +63,9 @@ class Meta(db.Model):
   uuid = db.Column(GUID, primary_key=True, index=True, unique=True, default=lambda: uuid.uuid4())
   user_id = db.Column(GUID, db.ForeignKey('user.uuid'), nullable=False)
   note_id = db.Column(GUID, db.ForeignKey('note.uuid'), nullable=False)
-  name_encrypted = db.Column('name', db.String)
-  name_compare = db.Column(db.String)
-  kind = db.Column(db.String)
+  name_encrypted = db.Column('name', db.String(512))
+  name_compare = db.Column(db.String(512))
+  kind = db.Column(db.String(128))
 
   @hybrid_property
   def name(self):
@@ -91,7 +91,7 @@ class Meta(db.Model):
 class Note(db.Model):
   uuid = db.Column(GUID, primary_key=True, index=True, unique=True, default=lambda: uuid.uuid4())
   user_id = db.Column(GUID, db.ForeignKey('user.uuid'), nullable=False)
-  data = db.Column(db.String)
+  data = db.Column(db.Text)
   title = db.Column(db.String(128), nullable=False)
   date = db.Column(db.DateTime(timezone=True), server_default=func.now())
   is_date = db.Column(db.Boolean, default=False)
@@ -152,7 +152,6 @@ def after_change_note(mapper, connection, target):
   elif isinstance(data.get('tags'), str):
     tags = list(set(map(str.strip, data['tags'].split(','))))
   tags = [x for x in tags if x]
-
   if isinstance(data.get('projects'), list):
     projects = list(set([x.replace(',', '\,') for x in data.get('projects')]))
   elif isinstance(data.get('projects'), str):
@@ -178,26 +177,27 @@ def after_change_note(mapper, connection, target):
   for tag in existing_tags:
     if tag.name not in tags:
       connection.execute(
-        'DELETE FROM meta WHERE uuid = ?',
+        'DELETE FROM meta WHERE uuid = %s',
         '{}'.format(tag.uuid).replace('-', '')
       )
     else:
       tags.remove(tag.name)
 
   for tag in tags:
+
     connection.execute(
-      'INSERT INTO meta (uuid, user_id, note_id, name, kind) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO meta (uuid, user_id, note_id, name, kind) VALUES (%s, %s, %s, %s, %s)',
       '{}'.format(uuid.uuid4()).replace('-', ''),
       '{}'.format(target.user_id).replace('-', ''),
       '{}'.format(target.uuid).replace('-', ''),
-      aes_encrypt(tag),
+      tag,
       'tag'
     )
 
   for project in existing_projects:
     if project.name not in projects:
       connection.execute(
-        'DELETE FROM meta WHERE uuid = ?',
+        'DELETE FROM meta WHERE uuid = %s',
         '{}'.format(project.uuid).replace('-', '')
       )
     else:
@@ -205,7 +205,7 @@ def after_change_note(mapper, connection, target):
 
   for project in projects:
     connection.execute(
-      'INSERT INTO meta (uuid, user_id, note_id, name, kind) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO meta (uuid, user_id, note_id, name, kind) VALUES (%s, %s, %s, %s, %s)',
       '{}'.format(uuid.uuid4()).replace('-', ''),
       '{}'.format(target.user_id).replace('-', ''),
       '{}'.format(target.uuid).replace('-', ''),
@@ -216,7 +216,7 @@ def after_change_note(mapper, connection, target):
   for task in existing_tasks:
     if task.name not in tasks:
       connection.execute(
-        'DELETE FROM meta WHERE uuid = ?',
+        'DELETE FROM meta WHERE uuid = %s',
         '{}'.format(task.uuid).replace('-', '')
       )
     else:
@@ -226,7 +226,7 @@ def after_change_note(mapper, connection, target):
     encrypted_task = aes_encrypt(task)
 
     connection.execute(
-      'INSERT INTO meta (uuid, user_id, note_id, name, name_compare, kind) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO meta (uuid, user_id, note_id, name, name_compare, kind) VALUES (%s, %s, %s, %s, %s, %s)',
       '{}'.format(uuid.uuid4()).replace('-', ''),
       '{}'.format(target.user_id).replace('-', ''),
       '{}'.format(target.uuid).replace('-', ''),
@@ -250,7 +250,7 @@ def before_update_task(mapper, connection, target):
   note_data = aes_encrypt(note.text.replace(aes_decrypt(target.name_compare), target.name))
 
   connection.execute(
-    'UPDATE note SET data = ? WHERE uuid = ?',
+    'UPDATE note SET data = %s WHERE uuid = %s',
     note_data,
     '{}'.format(note.uuid).replace('-', '')
   )
