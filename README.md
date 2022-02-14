@@ -54,7 +54,7 @@ The recommended way of running is to pull the image from [Docker Hub](https://hu
 | BASE_URL | Used when using a subfolder on a reverse proxy | None |
 | PUID | User ID (for folder permissions) | None |
 | PGID | Group ID (for folder permissions) | None |
-
+IS OK
 
 #### Volumes
 | Volume Name | Description |
