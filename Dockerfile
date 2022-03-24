@@ -18,7 +18,8 @@ RUN \
   cd /app/client && \
   npm ci && \
   npm rebuild node-sass && \
-  npm run build
+  npm run build && \
+  rm -rf /app/client
 
 EXPOSE 5000
 ENTRYPOINT "./run.sh"
